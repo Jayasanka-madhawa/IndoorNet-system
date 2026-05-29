@@ -40,7 +40,8 @@ export default function App() {
 
   return (
     <div className="app">
-      <nav className="nav">
+      <header className="site-header">
+        <nav className="nav">
         <NavLink to="/" className="nav-brand">
           <span className="brand-icon">🏏</span>
           NetBook
@@ -71,7 +72,8 @@ export default function App() {
             </>
           )}
         </div>
-      </nav>
+        </nav>
+      </header>
 
       <main className="main">
         <Routes>

@@ -179,6 +179,36 @@ class TestBookings:
         assert booking["status"] == "pending_payment"
         assert booking["amountLkr"] == 2000
 
+    def test_owner_block_own_venue_is_free_and_confirmed(self, client):
+        token = login(client, "owner@nets.lk", "owner123")
+        response = client.post(
+            "/api/bookings",
+            json={"bayId": 1, "startsAt": SLOT, "endsAt": SLOT_END},
+            headers=auth_headers(token),
+        )
+        assert response.status_code == 201
+        booking = response.get_json()
+        assert booking["status"] == "confirmed"
+        assert booking["amountLkr"] == 0
+
+    def test_owner_block_blocks_player_availability(self, client):
+        owner_token = login(client, "owner@nets.lk", "owner123")
+        client.post(
+            "/api/bookings",
+            json={"bayId": 1, "startsAt": SLOT, "endsAt": SLOT_END},
+            headers=auth_headers(owner_token),
+        )
+
+        response = client.get(
+            "/api/bookings/availability",
+            query_string={
+                "bay_id": 1,
+                "starts_at": SLOT,
+                "ends_at": SLOT_END,
+            },
+        )
+        assert response.get_json()["available"] is False
+
     def test_create_booking_conflict(self, client):
         token = login(client, "player@nets.lk", "player123")
         payload = {"bayId": 1, "startsAt": SLOT, "endsAt": SLOT_END}
@@ -193,6 +223,20 @@ class TestBookings:
         )
         assert second.status_code == 409
         assert second.get_json()["error"] == "Slot not available"
+
+    def test_reject_non_hourly_slot(self, client):
+        token = login(client, "player@nets.lk", "player123")
+        response = client.post(
+            "/api/bookings",
+            json={
+                "bayId": 1,
+                "startsAt": "2026-06-05T17:30:00",
+                "endsAt": "2026-06-05T18:30:00",
+            },
+            headers=auth_headers(token),
+        )
+        assert response.status_code == 400
+        assert "hour" in response.get_json()["error"].lower()
 
     def test_availability_after_pending_booking(self, client):
         token = login(client, "player@nets.lk", "player123")
@@ -212,6 +256,36 @@ class TestBookings:
         )
         assert response.status_code == 200
         assert response.get_json()["available"] is False
+
+    def test_occupied_hours(self, client):
+        token = login(client, "player@nets.lk", "player123")
+        client.post(
+            "/api/bookings",
+            json={"bayId": 1, "startsAt": SLOT, "endsAt": SLOT_END},
+            headers=auth_headers(token),
+        )
+
+        response = client.get(
+            "/api/bookings/occupied",
+            query_string={"bayId": 1, "date": "2026-06-01"},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 17 in data["occupiedHours"]
+
+    def test_occupied_full_area_blocks_net_hours(self, client):
+        token = login(client, "player@nets.lk", "player123")
+        client.post(
+            "/api/bookings",
+            json={"bayId": 4, "startsAt": SLOT, "endsAt": SLOT_END},
+            headers=auth_headers(token),
+        )
+
+        response = client.get(
+            "/api/bookings/occupied",
+            query_string={"bayId": 1, "date": "2026-06-01"},
+        )
+        assert 17 in response.get_json()["occupiedHours"]
 
     def test_full_area_blocks_nets(self, client):
         token = login(client, "player@nets.lk", "player123")

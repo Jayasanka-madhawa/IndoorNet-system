@@ -4,6 +4,9 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.booking_conflicts import has_conflict
+from datetime import date as date_type
+
+from app.booking_slots import occupied_hours_for_bay, validate_hourly_slot
 from app.extensions import db
 from app.models import Bay, Booking, User, Venue
 from app.stripe_utils import calculate_amount_lkr
@@ -24,6 +27,13 @@ def parse_dt(value):
     return dt
 
 
+def is_own_venue(user, bay):
+    if not user or user.role != "owner":
+        return False
+    venue = bay.venue
+    return venue is not None and venue.owner_id == user.id
+
+
 @bookings_bp.get("/availability")
 def availability():
     bay_id = request.args.get("bay_id", type=int) or request.args.get("bayId", type=int)
@@ -35,6 +45,10 @@ def availability():
     if ends_at <= starts_at:
         return jsonify({"error": "ends_at must be after starts_at"}), 400
 
+    slot_error = validate_hourly_slot(starts_at, ends_at)
+    if slot_error:
+        return jsonify({"error": slot_error}), 400
+
     bay = db.session.get(Bay, bay_id)
     if not bay or not bay.is_active:
         return jsonify({"error": "Space not found"}), 404
@@ -43,10 +57,35 @@ def availability():
     return jsonify({"available": available, "bayId": bay_id, "kind": bay.kind})
 
 
+@bookings_bp.get("/occupied")
+def occupied_slots():
+    bay_id = request.args.get("bay_id", type=int) or request.args.get("bayId", type=int)
+    date_str = request.args.get("date")
+
+    if not bay_id or not date_str:
+        return jsonify({"error": "bayId and date required"}), 400
+
+    try:
+        day = date_type.fromisoformat(date_str)
+    except ValueError:
+        return jsonify({"error": "Invalid date"}), 400
+
+    bay = db.session.get(Bay, bay_id)
+    if not bay or not bay.is_active:
+        return jsonify({"error": "Space not found"}), 404
+
+    return jsonify({
+        "bayId": bay_id,
+        "date": date_str,
+        "occupiedHours": occupied_hours_for_bay(bay_id, day),
+    })
+
+
 @bookings_bp.post("")
 @jwt_required()
 def create_booking():
     user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
     data = request.get_json() or {}
 
     bay_id = data.get("bayId") or data.get("bay_id")
@@ -58,6 +97,10 @@ def create_booking():
     if ends_at <= starts_at:
         return jsonify({"error": "endsAt must be after startsAt"}), 400
 
+    slot_error = validate_hourly_slot(starts_at, ends_at)
+    if slot_error:
+        return jsonify({"error": slot_error}), 400
+
     bay = db.session.get(Bay, bay_id)
     if not bay or not bay.is_active:
         return jsonify({"error": "Space not found"}), 404
@@ -65,13 +108,20 @@ def create_booking():
     if has_conflict(bay_id, starts_at, ends_at):
         return jsonify({"error": "Slot not available"}), 409
 
-    amount_lkr = calculate_amount_lkr(bay.hourly_rate_lkr, starts_at, ends_at)
+    owner_block = is_own_venue(user, bay)
+    if owner_block:
+        status = "confirmed"
+        amount_lkr = 0
+    else:
+        status = "pending_payment"
+        amount_lkr = calculate_amount_lkr(bay.hourly_rate_lkr, starts_at, ends_at)
+
     booking = Booking(
         bay_id=bay_id,
         user_id=user_id,
         starts_at=starts_at,
         ends_at=ends_at,
-        status="pending_payment",
+        status=status,
         amount_lkr=amount_lkr,
     )
     db.session.add(booking)

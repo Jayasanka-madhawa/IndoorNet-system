@@ -86,7 +86,7 @@ export default function MyBookings() {
           {formatDate(b.startsAt)} → {formatDate(b.endsAt)}
         </p>
         {b.amountLkr != null && (
-          <p style={{ marginTop: '0.5rem', fontWeight: 600, color: 'var(--accent)' }}>
+          <p style={{ marginTop: '0.5rem', fontWeight: 600, color: 'var(--navy)' }}>
             LKR {b.amountLkr.toLocaleString()}
           </p>
         )}

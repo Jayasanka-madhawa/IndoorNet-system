@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { slotToIso, todayDateStr } from '../bookingSlots';
+import BookingSlotPicker from '../components/BookingSlotPicker';
 import { api, getToken, getUser } from '../api';
 
 function formatDate(iso) {
@@ -31,7 +33,8 @@ export default function Games() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
-  const [startsAt, setStartsAt] = useState('');
+  const [date, setDate] = useState(todayDateStr());
+  const [selectedHours, setSelectedHours] = useState([]);
   const [minPlayers, setMinPlayers] = useState(6);
   const [gender, setGender] = useState('mixed');
 
@@ -50,6 +53,7 @@ export default function Games() {
   async function createGame(e) {
     e.preventDefault();
     if (!getToken()) return setError('Please sign in first');
+    if (!selectedHours.length) return setError('Pick a start time');
     setError('');
     setCreating(true);
     try {
@@ -57,13 +61,13 @@ export default function Games() {
         method: 'POST',
         body: JSON.stringify({
           title,
-          startsAt: new Date(startsAt).toISOString().slice(0, 19),
+          startsAt: slotToIso(date, selectedHours[0]),
           minPlayers: Number(minPlayers),
           gender,
         }),
       });
       setTitle('');
-      setStartsAt('');
+      setSelectedHours([]);
       loadGames();
     } catch (err) {
       setError(err.message);
@@ -103,65 +107,13 @@ export default function Games() {
       <header className="page-header">
         <h1 className="page-title">Pickup games</h1>
         <p className="page-subtitle">
-          Create a squad, fill your roster, then book a net when you have enough players
+          Browse open games and join a squad, or create your own pickup game below
         </p>
       </header>
 
       {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
 
-      {isLoggedIn ? (
-        <div className="card" style={{ marginBottom: '1.5rem' }}>
-          <h3 className="section-title" style={{ marginTop: 0 }}>Create a game</h3>
-          <form className="form form-wide" onSubmit={createGame}>
-            <label>
-              Title
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Friday evening nets"
-                required
-              />
-            </label>
-            <div className="form-row">
-              <label>
-                Start time
-                <input
-                  type="datetime-local"
-                  value={startsAt}
-                  onChange={(e) => setStartsAt(e.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                Min players
-                <input
-                  type="number"
-                  min={2}
-                  value={minPlayers}
-                  onChange={(e) => setMinPlayers(e.target.value)}
-                />
-              </label>
-            </div>
-            <label>
-              Gender
-              <select value={gender} onChange={(e) => setGender(e.target.value)}>
-                <option value="men">Men</option>
-                <option value="women">Women</option>
-                <option value="mixed">Mixed</option>
-              </select>
-            </label>
-            <button type="submit" className="btn" disabled={creating}>
-              {creating ? 'Creating…' : 'Create game'}
-            </button>
-          </form>
-        </div>
-      ) : (
-        <div className="empty-state" style={{ marginBottom: '1.5rem' }}>
-          <p>
-            <Link to="/login">Sign in</Link> to create or join pickup games
-          </p>
-        </div>
-      )}
+      <h2 className="section-title">Open games</h2>
 
       {loading ? (
         <div className="loading">
@@ -169,12 +121,12 @@ export default function Games() {
           Loading games…
         </div>
       ) : games.length === 0 ? (
-        <div className="empty-state">
+        <div className="empty-state" style={{ marginBottom: '2rem' }}>
           <div style={{ fontSize: '2rem' }}>👥</div>
-          <p>No open games yet — be the first to create one!</p>
+          <p>No open games yet — create one below</p>
         </div>
       ) : (
-        <div className="card-grid">
+        <div className="card-grid" style={{ marginBottom: '2rem' }}>
           {games.map((g) => {
             const pct = Math.min(100, (g.playerCount / g.minPlayers) * 100);
             const isJoined = g.players?.some((p) => p.id === user?.id);
@@ -226,6 +178,57 @@ export default function Games() {
               </article>
             );
           })}
+        </div>
+      )}
+
+      <h2 className="section-title">Create a pickup game</h2>
+
+      {isLoggedIn ? (
+        <div className="card">
+          <form className="form form-wide" onSubmit={createGame}>
+            <label>
+              Title
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Friday evening nets"
+                required
+              />
+            </label>
+            <BookingSlotPicker
+              date={date}
+              selectedHours={selectedHours}
+              onDateChange={setDate}
+              onSelectionChange={setSelectedHours}
+              singleSelect
+            />
+            <label>
+              Min players
+              <input
+                type="number"
+                min={2}
+                value={minPlayers}
+                onChange={(e) => setMinPlayers(e.target.value)}
+              />
+            </label>
+            <label>
+              Gender
+              <select value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="men">Men</option>
+                <option value="women">Women</option>
+                <option value="mixed">Mixed</option>
+              </select>
+            </label>
+            <button type="submit" className="btn" disabled={creating || !selectedHours.length}>
+              {creating ? 'Creating…' : 'Create game'}
+            </button>
+          </form>
+        </div>
+      ) : (
+        <div className="empty-state">
+          <p>
+            <Link to="/login">Sign in</Link> to create a pickup game
+          </p>
         </div>
       )}
     </div>

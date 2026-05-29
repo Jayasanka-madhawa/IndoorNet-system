@@ -1,6 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { api, readSession } from '../api';
+import { buildSlotTimesFromHours, todayDateStr } from '../bookingSlots';
+import BookingSlotPicker from '../components/BookingSlotPicker';
+import { buildBookableOptions } from '../venueUtils';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -22,43 +25,93 @@ function statusBadge(status) {
   return map[status] || 'badge-open';
 }
 
+function loadDashboardData() {
+  return api('/venues/mine').then((venues) => {
+    if (!venues.length) return { venue: null, bookings: [] };
+    const venue = venues[0];
+    return api(`/bookings/venue/${venue.id}`).then((bookings) => ({
+      venue,
+      bookings: bookings || [],
+    }));
+  });
+}
+
 export default function Dashboard() {
   const user = readSession();
+  const [venue, setVenue] = useState(null);
   const [bookings, setBookings] = useState([]);
-  const [venueName, setVenueName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [spaceId, setSpaceId] = useState('');
+  const [date, setDate] = useState(todayDateStr());
+  const [selectedHours, setSelectedHours] = useState([]);
+  const [blocking, setBlocking] = useState(false);
+  const [blockSuccess, setBlockSuccess] = useState('');
+
+  const bookableOptions = useMemo(() => buildBookableOptions(venue), [venue]);
+
+  useEffect(() => {
+    setSelectedHours([]);
+  }, [spaceId]);
+
+  function refresh() {
+    setLoading(true);
+    setError('');
+    return loadDashboardData()
+      .then(({ venue: v, bookings: b }) => {
+        setVenue(v);
+        setBookings(b);
+        const options = buildBookableOptions(v);
+        if (options.length && !spaceId) setSpaceId(String(options[0].id));
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
 
   useEffect(() => {
     if (user?.role !== 'owner') {
       setLoading(false);
       return undefined;
     }
-
-    let cancelled = false;
-    api('/venues/mine')
-      .then((venues) => {
-        if (!venues.length) return { bookings: [], name: '' };
-        setVenueName(venues[0].name);
-        return api(`/bookings/venue/${venues[0].id}`).then((data) => ({
-          bookings: data || [],
-          name: venues[0].name,
-        }));
-      })
-      .then((result) => {
-        if (!cancelled && result?.bookings) setBookings(result.bookings);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    refresh();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (bookableOptions.length && !spaceId) {
+      setSpaceId(String(bookableOptions[0].id));
+    }
+  }, [bookableOptions, spaceId]);
+
+  const slot = buildSlotTimesFromHours(date, selectedHours);
+
+  async function handleBlock(e) {
+    e.preventDefault();
+    if (!slot.valid) {
+      setError('Pick at least one time slot');
+      return;
+    }
+    setError('');
+    setBlockSuccess('');
+    setBlocking(true);
+    try {
+      await api('/bookings', {
+        method: 'POST',
+        body: JSON.stringify({
+          bayId: Number(spaceId),
+          startsAt: slot.startsAt,
+          endsAt: slot.endsAt,
+        }),
+      });
+      setDate(todayDateStr());
+      setSelectedHours([]);
+      setBlockSuccess('Slot blocked — no payment required.');
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBlocking(false);
+    }
+  }
 
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== 'owner') return <Navigate to="/venues" replace />;
@@ -69,16 +122,55 @@ export default function Dashboard() {
     .filter((b) => b.status === 'confirmed' && b.amountLkr)
     .reduce((sum, b) => sum + b.amountLkr, 0);
 
+  const selected = bookableOptions.find((o) => String(o.id) === spaceId);
+
   return (
     <div>
       <header className="page-header">
         <h1 className="page-title">Dashboard</h1>
         <p className="page-subtitle">
-          {venueName ? `Bookings for ${venueName}` : 'Your venue bookings at a glance'}
+          {venue?.name ? `Manage ${venue.name}` : 'Your venue bookings at a glance'}
         </p>
       </header>
 
       {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
+      {blockSuccess && (
+        <p className="success" style={{ marginBottom: '1rem' }}>{blockSuccess}</p>
+      )}
+
+      {venue && bookableOptions.length > 0 && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <h2 className="section-title" style={{ marginTop: 0 }}>Block a slot</h2>
+          <p className="muted" style={{ marginBottom: '1rem' }}>
+            Reserve a net or full area on your venue — free, confirmed instantly.
+          </p>
+          <form className="form" onSubmit={handleBlock}>
+            <label>
+              Space
+              <select value={spaceId} onChange={(e) => setSpaceId(e.target.value)}>
+                {bookableOptions.map((o) => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+            {selected?.kind === 'full_area' && selected.areaName && (
+              <p className="muted">
+                Blocks all nets in {selected.areaName} for this time slot.
+              </p>
+            )}
+            <BookingSlotPicker
+              bayId={Number(spaceId)}
+              date={date}
+              selectedHours={selectedHours}
+              onDateChange={setDate}
+              onSelectionChange={setSelectedHours}
+            />
+            <button type="submit" className="btn" disabled={blocking || !slot.valid}>
+              {blocking ? 'Blocking…' : 'Block slot'}
+            </button>
+          </form>
+        </div>
+      )}
 
       <div className="stats-row">
         <div className="stat-card">
@@ -109,7 +201,7 @@ export default function Dashboard() {
       ) : bookings.length === 0 ? (
         <div className="empty-state">
           <div style={{ fontSize: '2rem' }}>📋</div>
-          <p>No bookings yet — they'll show up here when players book your nets</p>
+          <p>No bookings yet — player bookings and your blocks will show here</p>
         </div>
       ) : (
         <div className="card-grid">
@@ -127,10 +219,13 @@ export default function Dashboard() {
               <p className="muted">
                 {formatDate(b.startsAt)} → {formatDate(b.endsAt)}
               </p>
-              {b.amountLkr && (
-                <p style={{ marginTop: '0.5rem', fontWeight: 600, color: 'var(--accent)' }}>
+              {b.amountLkr > 0 && (
+                <p style={{ marginTop: '0.5rem', fontWeight: 600, color: 'var(--navy)' }}>
                   LKR {b.amountLkr.toLocaleString()}
                 </p>
+              )}
+              {b.amountLkr === 0 && b.status === 'confirmed' && (
+                <p className="muted" style={{ marginTop: '0.5rem' }}>Owner block</p>
               )}
             </article>
           ))}

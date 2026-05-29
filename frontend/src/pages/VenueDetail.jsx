@@ -1,60 +1,33 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { api, getToken } from '../api';
-
-function buildBookableOptions(venue) {
-  const options = [];
-
-  venue.areas?.forEach((area) => {
-    area.nets?.forEach((net) => {
-      options.push({
-        id: net.id,
-        label: `${area.name} — ${net.name}`,
-        kind: 'net',
-        areaName: area.name,
-        hourlyRateLkr: net.hourlyRateLkr,
-      });
-    });
-    if (area.fullArea) {
-      options.push({
-        id: area.fullArea.id,
-        label: `${area.name} — Full area`,
-        kind: 'full_area',
-        areaName: area.name,
-        hourlyRateLkr: area.fullArea.hourlyRateLkr,
-      });
-    }
-  });
-
-  venue.bays
-    ?.filter((b) => !b.areaId)
-    .forEach((space) => {
-      options.push({
-        id: space.id,
-        label: space.name,
-        kind: space.kind,
-        areaName: null,
-        hourlyRateLkr: space.hourlyRateLkr,
-      });
-    });
-
-  return options;
-}
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { api, readSession } from '../api';
+import { buildSlotTimesFromHours, estimateAmount, todayDateStr } from '../bookingSlots';
+import BookingSlotPicker from '../components/BookingSlotPicker';
+import { buildBookableOptions, isOwnVenue } from '../venueUtils';
 
 export default function VenueDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const user = readSession();
   const [venue, setVenue] = useState(null);
   const [spaceId, setSpaceId] = useState('');
-  const [startsAt, setStartsAt] = useState('');
-  const [endsAt, setEndsAt] = useState('');
+  const [date, setDate] = useState(todayDateStr());
+  const [selectedHours, setSelectedHours] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
   const bookableOptions = useMemo(
-    () => (venue ? buildBookableOptions(venue) : []),
+    () => buildBookableOptions(venue),
     [venue]
   );
+  const ownVenue = isOwnVenue(user, venue);
+  const selected = bookableOptions.find((o) => String(o.id) === spaceId);
+  const slot = buildSlotTimesFromHours(date, selectedHours);
+
+  useEffect(() => {
+    setSelectedHours([]);
+  }, [spaceId]);
 
   useEffect(() => {
     api(`/venues/${id}`)
@@ -69,8 +42,12 @@ export default function VenueDetail() {
 
   async function handleBook(e) {
     e.preventDefault();
-    if (!getToken()) {
+    if (!user) {
       setError('Please sign in to book');
+      return;
+    }
+    if (!slot.valid) {
+      setError('Pick at least one time slot');
       return;
     }
     setError('');
@@ -80,10 +57,16 @@ export default function VenueDetail() {
         method: 'POST',
         body: JSON.stringify({
           bayId: Number(spaceId),
-          startsAt: new Date(startsAt).toISOString().slice(0, 19),
-          endsAt: new Date(endsAt).toISOString().slice(0, 19),
+          startsAt: slot.startsAt,
+          endsAt: slot.endsAt,
         }),
       });
+
+      if (booking.status === 'confirmed') {
+        navigate('/dashboard');
+        return;
+      }
+
       const checkout = await api('/payments/checkout', {
         method: 'POST',
         body: JSON.stringify({ bookingId: booking.id }),
@@ -95,7 +78,9 @@ export default function VenueDetail() {
     }
   }
 
-  const selected = bookableOptions.find((o) => String(o.id) === spaceId);
+  const estimatedTotal = selected && slot.valid
+    ? estimateAmount(selected.hourlyRateLkr, slot.durationHours)
+    : 0;
 
   if (pageLoading) {
     return (
@@ -173,10 +158,17 @@ export default function VenueDetail() {
         </section>
 
         <section className="card">
-          <h2 className="section-title" style={{ marginTop: 0 }}>Book a session</h2>
-          {!getToken() && (
+          <h2 className="section-title" style={{ marginTop: 0 }}>
+            {ownVenue ? 'Block a slot' : 'Book a session'}
+          </h2>
+          {!user && (
             <p className="muted" style={{ marginBottom: '1rem' }}>
               <Link to="/login">Sign in</Link> to reserve and pay online.
+            </p>
+          )}
+          {ownVenue && (
+            <p className="muted" style={{ marginBottom: '1rem' }}>
+              You own this venue — blocks are free and confirmed instantly.
             </p>
           )}
           <form className="form" onSubmit={handleBook}>
@@ -185,44 +177,39 @@ export default function VenueDetail() {
               <select value={spaceId} onChange={(e) => setSpaceId(e.target.value)}>
                 {bookableOptions.map((o) => (
                   <option key={o.id} value={o.id}>
-                    {o.label} — LKR {o.hourlyRateLkr}/hr
+                    {o.label}{ownVenue ? '' : ` — LKR ${o.hourlyRateLkr}/hr`}
                   </option>
                 ))}
               </select>
             </label>
             {selected?.kind === 'full_area' && selected.areaName && (
               <p className="muted">
-                Booking the full area blocks all nets in {selected.areaName} for this time slot.
+                Blocking the full area reserves all nets in {selected.areaName} for this time slot.
               </p>
             )}
-            <div className="form-row">
-              <label>
-                Start
-                <input
-                  type="datetime-local"
-                  value={startsAt}
-                  onChange={(e) => setStartsAt(e.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                End
-                <input
-                  type="datetime-local"
-                  value={endsAt}
-                  onChange={(e) => setEndsAt(e.target.value)}
-                  required
-                />
-              </label>
-            </div>
-            {selected && startsAt && endsAt && (
-              <p className="muted">
-                Rate: LKR {selected.hourlyRateLkr}/hr — final amount calculated at checkout
-              </p>
-            )}
+
+            <BookingSlotPicker
+              bayId={Number(spaceId)}
+              date={date}
+              selectedHours={selectedHours}
+              onDateChange={setDate}
+              onSelectionChange={setSelectedHours}
+              summaryExtra={
+                !ownVenue && estimatedTotal > 0
+                  ? ` · LKR ${estimatedTotal.toLocaleString()} estimated`
+                  : null
+              }
+            />
+
             {error && <p className="error">{error}</p>}
-            <button type="submit" className="btn" disabled={loading}>
-              {loading ? 'Redirecting to payment…' : 'Book & pay'}
+            <button
+              type="submit"
+              className="btn"
+              disabled={loading || !slot.valid}
+            >
+              {loading
+                ? (ownVenue ? 'Blocking…' : 'Redirecting to payment…')
+                : (ownVenue ? 'Block slot' : 'Book & pay')}
             </button>
           </form>
         </section>
