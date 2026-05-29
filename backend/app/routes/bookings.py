@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
+from app.booking_conflicts import has_conflict
 from app.extensions import db
 from app.models import Bay, Booking, User, Venue
 from app.stripe_utils import calculate_amount_lkr
@@ -23,23 +24,11 @@ def parse_dt(value):
     return dt
 
 
-def has_conflict(bay_id, starts_at, ends_at, exclude_id=None):
-    query = Booking.query.filter(
-        Booking.bay_id == bay_id,
-        Booking.status.in_(["confirmed", "pending_payment"]),
-        Booking.starts_at < ends_at,
-        Booking.ends_at > starts_at,
-    )
-    if exclude_id:
-        query = query.filter(Booking.id != exclude_id)
-    return query.first() is not None
-
-
 @bookings_bp.get("/availability")
 def availability():
-    bay_id = request.args.get("bay_id", type=int)
-    starts_at = parse_dt(request.args.get("starts_at"))
-    ends_at = parse_dt(request.args.get("ends_at"))
+    bay_id = request.args.get("bay_id", type=int) or request.args.get("bayId", type=int)
+    starts_at = parse_dt(request.args.get("starts_at") or request.args.get("startsAt"))
+    ends_at = parse_dt(request.args.get("ends_at") or request.args.get("endsAt"))
 
     if not bay_id or not starts_at or not ends_at:
         return jsonify({"error": "bay_id, starts_at, ends_at required"}), 400
@@ -48,10 +37,10 @@ def availability():
 
     bay = db.session.get(Bay, bay_id)
     if not bay or not bay.is_active:
-        return jsonify({"error": "Bay not found"}), 404
+        return jsonify({"error": "Space not found"}), 404
 
     available = not has_conflict(bay_id, starts_at, ends_at)
-    return jsonify({"available": available, "bayId": bay_id})
+    return jsonify({"available": available, "bayId": bay_id, "kind": bay.kind})
 
 
 @bookings_bp.post("")
@@ -71,11 +60,10 @@ def create_booking():
 
     bay = db.session.get(Bay, bay_id)
     if not bay or not bay.is_active:
-        return jsonify({"error": "Bay not found"}), 404
+        return jsonify({"error": "Space not found"}), 404
 
     if has_conflict(bay_id, starts_at, ends_at):
         return jsonify({"error": "Slot not available"}), 409
-
 
     amount_lkr = calculate_amount_lkr(bay.hourly_rate_lkr, starts_at, ends_at)
     booking = Booking(
@@ -128,4 +116,4 @@ def venue_bookings(venue_id):
         .order_by(Booking.starts_at.desc())
         .all()
     )
-    return jsonify([b.to_dict() for b in bookings])
+    return jsonify([b.to_dict(include_details=True) for b in bookings])

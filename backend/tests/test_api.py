@@ -113,8 +113,12 @@ class TestVenues:
         assert response.status_code == 200
         venue = response.get_json()
         assert venue["name"] == "Colombo Indoor Nets"
-        assert len(venue["bays"]) == 3
+        assert len(venue["bays"]) == 4
+        assert venue["bays"][0]["kind"] == "net"
         assert venue["bays"][0]["hourlyRateLkr"] == 2000
+        assert len(venue["areas"]) == 1
+        assert len(venue["areas"][0]["nets"]) == 3
+        assert venue["areas"][0]["fullArea"]["kind"] == "full_area"
 
     def test_get_venue_not_found(self, client):
         response = client.get("/api/venues/999")
@@ -126,7 +130,7 @@ class TestVenues:
         assert response.status_code == 200
         venues = response.get_json()
         assert len(venues) == 1
-        assert len(venues[0]["bays"]) == 3
+        assert len(venues[0]["bays"]) == 4
 
     def test_player_cannot_access_my_venues(self, client):
         token = login(client, "player@nets.lk", "player123")
@@ -208,6 +212,61 @@ class TestBookings:
         )
         assert response.status_code == 200
         assert response.get_json()["available"] is False
+
+    def test_full_area_blocks_nets(self, client):
+        token = login(client, "player@nets.lk", "player123")
+        client.post(
+            "/api/bookings",
+            json={"bayId": 4, "startsAt": SLOT, "endsAt": SLOT_END},
+            headers=auth_headers(token),
+        )
+
+        for net_id in (1, 2, 3):
+            response = client.get(
+                "/api/bookings/availability",
+                query_string={
+                    "bay_id": net_id,
+                    "starts_at": SLOT,
+                    "ends_at": SLOT_END,
+                },
+            )
+            assert response.get_json()["available"] is False
+
+    def test_net_blocks_full_area(self, client):
+        token = login(client, "player@nets.lk", "player123")
+        client.post(
+            "/api/bookings",
+            json={"bayId": 1, "startsAt": SLOT, "endsAt": SLOT_END},
+            headers=auth_headers(token),
+        )
+
+        response = client.get(
+            "/api/bookings/availability",
+            query_string={
+                "bay_id": 4,
+                "starts_at": SLOT,
+                "ends_at": SLOT_END,
+            },
+        )
+        assert response.get_json()["available"] is False
+
+    def test_nets_in_same_area_do_not_block_each_other(self, client):
+        token = login(client, "player@nets.lk", "player123")
+        client.post(
+            "/api/bookings",
+            json={"bayId": 1, "startsAt": SLOT, "endsAt": SLOT_END},
+            headers=auth_headers(token),
+        )
+
+        response = client.get(
+            "/api/bookings/availability",
+            query_string={
+                "bay_id": 2,
+                "starts_at": SLOT,
+                "ends_at": SLOT_END,
+            },
+        )
+        assert response.get_json()["available"] is True
 
     def test_my_bookings(self, client):
         token = login(client, "player@nets.lk", "player123")

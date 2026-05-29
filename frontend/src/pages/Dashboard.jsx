@@ -116,11 +116,14 @@ export default function Dashboard() {
           {bookings.map((b) => (
             <article key={b.id} className="card">
               <div className="card-header">
-                <h3>Bay {b.bayId}</h3>
+                <h3>{b.bayName || (b.spaceKind === 'full_area' ? 'Full area' : `Net ${b.bayId}`)}</h3>
                 <span className={`badge ${statusBadge(b.status)}`}>
                   {b.status.replace('_', ' ')}
                 </span>
               </div>
+              {b.areaName && (
+                <p className="muted">{b.areaName}{b.spaceKind === 'full_area' ? ' — Full area' : ''}</p>
+              )}
               <p className="muted">
                 {formatDate(b.startsAt)} → {formatDate(b.endsAt)}
               </p>

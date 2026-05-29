@@ -29,7 +29,7 @@ export default function Venues() {
     <div>
       <header className="page-header">
         <h1 className="page-title">Indoor nets</h1>
-        <p className="page-subtitle">Browse venues and book a bay for your session</p>
+        <p className="page-subtitle">Browse venues and book a net or full area</p>
       </header>
 
       {venues.length === 0 ? (
@@ -48,7 +48,7 @@ export default function Venues() {
               <p className="muted">📍 {v.address}</p>
               <div className="card-footer">
                 <Link to={`/venues/${v.id}`} className="btn btn-sm">
-                  View bays & book
+                  View spaces & book
                 </Link>
               </div>
             </article>

@@ -12,7 +12,7 @@ os.environ["FRONTEND_URL"] = "http://localhost:5173"
 
 from app import create_app
 from app.extensions import db
-from app.models import Bay, User, Venue
+from app.models import Area, Bay, User, Venue
 
 
 def seed_database():
@@ -50,10 +50,43 @@ def seed_database():
     db.session.add(venue)
     db.session.flush()
 
+    main_hall = Area(
+        venue_id=venue.id,
+        name="Main Hall",
+        allows_full_booking=True,
+    )
+    db.session.add(main_hall)
+    db.session.flush()
+
     bays = [
-        Bay(venue_id=venue.id, name="Bay 1", hourly_rate_lkr=2000),
-        Bay(venue_id=venue.id, name="Bay 2", hourly_rate_lkr=2000),
-        Bay(venue_id=venue.id, name="Bay 3", hourly_rate_lkr=2500),
+        Bay(
+            venue_id=venue.id,
+            area_id=main_hall.id,
+            kind="net",
+            name="Net 1",
+            hourly_rate_lkr=2000,
+        ),
+        Bay(
+            venue_id=venue.id,
+            area_id=main_hall.id,
+            kind="net",
+            name="Net 2",
+            hourly_rate_lkr=2000,
+        ),
+        Bay(
+            venue_id=venue.id,
+            area_id=main_hall.id,
+            kind="net",
+            name="Net 3",
+            hourly_rate_lkr=2500,
+        ),
+        Bay(
+            venue_id=venue.id,
+            area_id=main_hall.id,
+            kind="full_area",
+            name="Main Hall — Full area",
+            hourly_rate_lkr=5500,
+        ),
     ]
     db.session.add_all(bays)
     db.session.commit()

@@ -27,6 +27,13 @@ function statusLabel(status) {
   return status.replace('_', ' ');
 }
 
+function spaceLabel(booking) {
+  if (booking.spaceKind === 'full_area') {
+    return booking.areaName ? `${booking.areaName} — Full area` : booking.bayName || 'Full area';
+  }
+  return booking.bayName || `Net ${booking.bayId}`;
+}
+
 export default function MyBookings() {
   const user = readSession();
   const [bookings, setBookings] = useState([]);
@@ -70,10 +77,10 @@ export default function MyBookings() {
     return (
       <article key={b.id} className="card">
         <div className="card-header">
-          <h3>{b.venueName || `Bay ${b.bayId}`}</h3>
+          <h3>{b.venueName || 'Booking'}</h3>
           <span className={`badge ${statusBadge(b.status)}`}>{statusLabel(b.status)}</span>
         </div>
-        <p className="muted">{b.bayName || `Bay ${b.bayId}`}</p>
+        <p className="muted">{spaceLabel(b)}</p>
         {b.venueAddress && <p className="muted">📍 {b.venueAddress}</p>}
         <p style={{ marginTop: '0.5rem' }}>
           {formatDate(b.startsAt)} → {formatDate(b.endsAt)}
@@ -98,7 +105,7 @@ export default function MyBookings() {
     <div>
       <header className="page-header">
         <h1 className="page-title">My bookings</h1>
-        <p className="page-subtitle">Nets you have reserved</p>
+        <p className="page-subtitle">Nets and full-area sessions you have reserved</p>
       </header>
 
       {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}

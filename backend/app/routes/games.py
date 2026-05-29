@@ -5,7 +5,8 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.extensions import db
 from app.models import Bay, Booking, Game, User, Venue
-from app.routes.bookings import has_conflict, parse_dt
+from app.booking_conflicts import has_conflict
+from app.routes.bookings import parse_dt
 from app.stripe_utils import calculate_amount_lkr, create_checkout_session
 
 
