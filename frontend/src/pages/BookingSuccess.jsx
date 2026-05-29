@@ -1,8 +1,17 @@
+import { Link } from 'react-router-dom';
+
 export default function BookingSuccess() {
   return (
-    <div>
-      <h1 className="page-title">Booking Confirmed</h1>
-      <p className="muted">Step 7 will wire this to the API.</p>
+    <div className="result-page">
+      <div className="result-icon success">✓</div>
+      <h1 className="page-title">Booking confirmed</h1>
+      <p className="success" style={{ marginBottom: '1.5rem' }}>
+        Payment received — your net is reserved. See you on the pitch!
+      </p>
+      <div className="btn-group" style={{ justifyContent: 'center' }}>
+        <Link to="/venues" className="btn">Browse nets</Link>
+        <Link to="/games" className="btn btn-outline">My games</Link>
+      </div>
     </div>
   );
 }

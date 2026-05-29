@@ -11,6 +11,7 @@ export function setToken(token) {
 export function clearToken() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+  window.dispatchEvent(new Event('auth-change'));
 }
 
 export function getUser() {
@@ -20,6 +21,7 @@ export function getUser() {
 
 export function setUser(user) {
   localStorage.setItem('user', JSON.stringify(user));
+  window.dispatchEvent(new Event('auth-change'));
 }
 
 export async function api(path, options = {}) {
