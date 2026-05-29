@@ -5,25 +5,28 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.extensions import db
 from app.models import Bay, Booking, User, Venue
+from app.stripe_utils import calculate_amount_lkr
+
 
 bookings_bp = Blueprint("bookings", __name__, url_prefix="/api/bookings")
 
 
 def parse_dt(value):
+    """Parse ISO datetime to naive UTC (matches SQLite storage)."""
     if not value:
         return None
     if value.endswith("Z"):
         value = value[:-1] + "+00:00"
     dt = datetime.fromisoformat(value)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt
 
 
 def has_conflict(bay_id, starts_at, ends_at, exclude_id=None):
     query = Booking.query.filter(
         Booking.bay_id == bay_id,
-        Booking.status == "confirmed",
+        Booking.status.in_(["confirmed", "pending_payment"]),
         Booking.starts_at < ends_at,
         Booking.ends_at > starts_at,
     )
@@ -73,16 +76,18 @@ def create_booking():
     if has_conflict(bay_id, starts_at, ends_at):
         return jsonify({"error": "Slot not available"}), 409
 
+
+    amount_lkr = calculate_amount_lkr(bay.hourly_rate_lkr, starts_at, ends_at)
     booking = Booking(
         bay_id=bay_id,
         user_id=user_id,
         starts_at=starts_at,
         ends_at=ends_at,
-        status="confirmed",
+        status="pending_payment",
+        amount_lkr=amount_lkr,
     )
     db.session.add(booking)
     db.session.commit()
-
     return jsonify(booking.to_dict()), 201
 
 

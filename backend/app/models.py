@@ -4,7 +4,7 @@ from app.extensions import db
 
 
 def utcnow():
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class User(db.Model):
@@ -89,7 +89,10 @@ class Booking(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     starts_at = db.Column(db.DateTime, nullable=False)
     ends_at = db.Column(db.DateTime, nullable=False)
-    status = db.Column(db.String(20), nullable=False, default="confirmed")  # confirmed | cancelled
+    status = db.Column(db.String(20), nullable=False, default="pending_payment")
+    # pending_payment | confirmed | cancelled
+    amount_lkr = db.Column(db.Integer, nullable=True)
+    stripe_session_id = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow)
 
     bay = db.relationship("Bay", back_populates="bookings")
@@ -103,6 +106,7 @@ class Booking(db.Model):
             "startsAt": self.starts_at.isoformat(),
             "endsAt": self.ends_at.isoformat(),
             "status": self.status,
+            "amountLkr": self.amount_lkr,
         }
 
 

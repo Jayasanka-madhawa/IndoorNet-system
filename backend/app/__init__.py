@@ -8,6 +8,9 @@ from app.extensions import db, jwt
 from app.routes.auth import auth_bp
 from app.routes.venues import venues_bp
 from app.routes.bookings import bookings_bp
+from app.routes.games import games_bp
+from app.routes.payments import payments_bp
+
 
 
 
@@ -31,7 +34,8 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(venues_bp)   
     app.register_blueprint(bookings_bp)
-
+    app.register_blueprint(games_bp)
+    app.register_blueprint(payments_bp)
 
     @app.get("/api/health")
     def health():

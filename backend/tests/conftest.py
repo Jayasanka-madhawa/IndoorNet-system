@@ -3,10 +3,12 @@ import os
 import pytest
 from werkzeug.security import generate_password_hash
 
-# Use in-memory DB before the app is created
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
-os.environ["JWT_SECRET_KEY"] = "test-jwt-secret"
+os.environ["JWT_SECRET_KEY"] = "test-jwt-secret-key-at-least-32-chars-long"
 os.environ["SECRET_KEY"] = "test-secret"
+os.environ["STRIPE_SECRET_KEY"] = "sk_test_fake"
+os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_fake"
+os.environ["FRONTEND_URL"] = "http://localhost:5173"
 
 from app import create_app
 from app.extensions import db
@@ -29,7 +31,15 @@ def seed_database():
         role="player",
         gender="men",
     )
-    db.session.add_all([owner, player])
+    player2 = User(
+        email="newplayer@test.lk",
+        password_hash=generate_password_hash("test123"),
+        full_name="New Player",
+        phone="0771111111",
+        role="player",
+        gender="men",
+    )
+    db.session.add_all([owner, player, player2])
     db.session.flush()
 
     venue = Venue(
@@ -82,3 +92,13 @@ def login(client, email, password):
 
 def auth_headers(token):
     return {"Authorization": f"Bearer {token}"}
+
+
+def create_pending_booking(client, token, bay_id=1, slot="2026-06-01T17:00:00", slot_end="2026-06-01T18:00:00"):
+    response = client.post(
+        "/api/bookings",
+        json={"bayId": bay_id, "startsAt": slot, "endsAt": slot_end},
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 201
+    return response.get_json()
