@@ -98,8 +98,8 @@ class Booking(db.Model):
     bay = db.relationship("Bay", back_populates="bookings")
     user = db.relationship("User", back_populates="bookings")
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_details=False):
+        data = {
             "id": self.id,
             "bayId": self.bay_id,
             "userId": self.user_id,
@@ -108,6 +108,13 @@ class Booking(db.Model):
             "status": self.status,
             "amountLkr": self.amount_lkr,
         }
+        if include_details and self.bay:
+            data["bayName"] = self.bay.name
+            data["venueId"] = self.bay.venue_id
+            if self.bay.venue:
+                data["venueName"] = self.bay.venue.name
+                data["venueAddress"] = self.bay.venue.address
+        return data
 
 
 # Many-to-many: players in a pickup game

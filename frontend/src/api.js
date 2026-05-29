@@ -24,6 +24,19 @@ export function setUser(user) {
   window.dispatchEvent(new Event('auth-change'));
 }
 
+/** User + token must both exist; clears orphaned user data. */
+export function readSession() {
+  const user = getUser();
+  const token = getToken();
+  if (user && token) return user;
+  if (user && !token) clearToken();
+  return null;
+}
+
+export function isLoggedIn() {
+  return readSession() !== null;
+}
+
 export async function api(path, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -39,7 +52,10 @@ export async function api(path, options = {}) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || `Request failed (${res.status})`);
+    if (res.status === 401 && token) {
+      clearToken();
+    }
+    throw new Error(data.error || data.msg || `Request failed (${res.status})`);
   }
 
   return data;

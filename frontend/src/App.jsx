@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
-import { getUser, clearToken } from './api';
+import { getUser, clearToken, readSession } from './api';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -8,6 +8,7 @@ import Venues from './pages/Venues';
 import VenueDetail from './pages/VenueDetail';
 import Games from './pages/Games';
 import Dashboard from './pages/Dashboard';
+import MyBookings from './pages/MyBookings';
 import BookingSuccess from './pages/BookingSuccess';
 import BookingCancel from './pages/BookingCancel';
 
@@ -16,10 +17,10 @@ function navClass({ isActive }) {
 }
 
 export default function App() {
-  const [user, setUserState] = useState(getUser());
+  const [user, setUserState] = useState(() => readSession());
 
   useEffect(() => {
-    const sync = () => setUserState(getUser());
+    const sync = () => setUserState(readSession());
     window.addEventListener('auth-change', sync);
     return () => window.removeEventListener('auth-change', sync);
   }, []);
@@ -47,6 +48,9 @@ export default function App() {
         <div className="nav-links">
           <NavLink to="/venues" className={navClass}>Nets</NavLink>
           <NavLink to="/games" className={navClass}>Games</NavLink>
+          {user?.role === 'player' && (
+            <NavLink to="/my-bookings" className={navClass}>My bookings</NavLink>
+          )}
           {user?.role === 'owner' && (
             <NavLink to="/dashboard" className={navClass}>Dashboard</NavLink>
           )}
@@ -77,6 +81,7 @@ export default function App() {
           <Route path="/venues" element={<Venues />} />
           <Route path="/venues/:id" element={<VenueDetail />} />
           <Route path="/games" element={<Games />} />
+          <Route path="/my-bookings" element={<MyBookings />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/booking/success" element={<BookingSuccess />} />
           <Route path="/booking/cancel" element={<BookingCancel />} />

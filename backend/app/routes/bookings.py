@@ -100,7 +100,7 @@ def my_bookings():
         .order_by(Booking.starts_at.desc())
         .all()
     )
-    return jsonify([b.to_dict() for b in bookings])
+    return jsonify([b.to_dict(include_details=True) for b in bookings])
 
 
 @bookings_bp.get("/venue/<int:venue_id>")

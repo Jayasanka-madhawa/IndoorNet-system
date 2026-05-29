@@ -9,8 +9,8 @@ export default function BookingSuccess() {
         Payment received — your net is reserved. See you on the pitch!
       </p>
       <div className="btn-group" style={{ justifyContent: 'center' }}>
-        <Link to="/venues" className="btn">Browse nets</Link>
-        <Link to="/games" className="btn btn-outline">My games</Link>
+        <Link to="/my-bookings" className="btn">My bookings</Link>
+        <Link to="/venues" className="btn btn-outline">Browse nets</Link>
       </div>
     </div>
   );

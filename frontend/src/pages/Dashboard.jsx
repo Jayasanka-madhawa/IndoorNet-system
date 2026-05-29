@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { api, getUser } from '../api';
+import { api, readSession } from '../api';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -23,14 +23,19 @@ function statusBadge(status) {
 }
 
 export default function Dashboard() {
-  const user = getUser();
+  const user = readSession();
   const [bookings, setBookings] = useState([]);
   const [venueName, setVenueName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user?.role !== 'owner') return;
+    if (user?.role !== 'owner') {
+      setLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
     api('/venues/mine')
       .then((venues) => {
         if (!venues.length) return { bookings: [], name: '' };
@@ -41,14 +46,22 @@ export default function Dashboard() {
         }));
       })
       .then((result) => {
-        if (result?.bookings) setBookings(result.bookings);
+        if (!cancelled && result?.bookings) setBookings(result.bookings);
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [user]);
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-  if (!user) return <Navigate to="/login" />;
-  if (user.role !== 'owner') return <Navigate to="/venues" />;
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'owner') return <Navigate to="/venues" replace />;
 
   const confirmed = bookings.filter((b) => b.status === 'confirmed').length;
   const pending = bookings.filter((b) => b.status === 'pending_payment').length;
